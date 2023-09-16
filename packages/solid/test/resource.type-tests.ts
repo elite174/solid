@@ -1,5 +1,11 @@
 import { createResource, ResourceReturn, createSignal, Resource, Setter } from "../src";
-import { InitializedResource, InitializedResourceReturn } from "../src/reactive/signal";
+import {
+  InitializedResource,
+  InitializedResourceReturn,
+  InitializedResourceReturnWithStorageProvided,
+  ResourceReturnWithStorageProvided,
+  ResourceStorage
+} from "../src/reactive/signal";
 
 type Assert<T extends true> = T;
 // https://github.com/Microsoft/TypeScript/issues/27024#issuecomment-421529650
@@ -15,7 +21,12 @@ type Equals<X, Y> = (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y 
   const resourceReturn = createResource(
     k => {
       return Promise.resolve(1);
-      type Tests = Assert<Equals<typeof resourceReturn, ResourceReturn<number, unknown>>> &
+      type Tests = Assert<
+        Equals<
+          typeof resourceReturn,
+          ResourceReturnWithStorageProvided<number, typeof createSignal, unknown>
+        >
+      > &
         Assert<Equals<typeof k, true>>;
     },
     {
@@ -28,6 +39,7 @@ type Equals<X, Y> = (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y 
       }
     }
   );
+  resourceReturn[1].mutate
 }
 
 // without source
@@ -37,7 +49,10 @@ type Equals<X, Y> = (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y 
     k => {
       return Promise.resolve(1);
       type Tests = Assert<
-        Equals<typeof resourceReturn, InitializedResourceReturn<number, unknown>>
+        Equals<
+          typeof resourceReturn,
+          InitializedResourceReturnWithStorageProvided<number, typeof createSignal, unknown>
+        >
       > &
         Assert<Equals<typeof k, true>>;
     },
@@ -64,11 +79,16 @@ type Equals<X, Y> = (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y 
     () => 1,
     k => {
       return Promise.resolve(1);
-      type Tests = Assert<Equals<typeof resourceReturn, ResourceReturn<number, unknown>>> &
+      type Tests = Assert<
+        Equals<
+          typeof resourceReturn,
+          ResourceReturnWithStorageProvided<number, typeof storage, unknown>
+        >
+      > &
         Assert<Equals<typeof k, number>>;
     },
     {
-      storage: createSignal,
+      storage: storage,
       name: "test",
       deferStream: true,
       onHydrated: (k, info) => {

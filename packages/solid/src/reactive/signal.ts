@@ -492,8 +492,21 @@ export type Resource<T> = Unresolved | Pending | Ready<T> | Refreshing<T> | Erro
 
 export type InitializedResource<T> = Ready<T> | Refreshing<T> | Errored;
 
-export type ResourceActions<T, R = unknown> = {
-  mutate: Setter<T>;
+export type ResourceStorageReturn<T> = [() => T | undefined, (val: T | undefined) => void];
+
+export type ResourceStorage<T> = (initialValue: T | undefined) => ResourceStorageReturn<T>;
+
+export type ResourceActions<T, RS extends ResourceStorage<NoInfer<T>>, R = unknown> = {
+  mutate: ReturnType<RS>[1] | Setter<T>;
+  refetch: (info?: R) => T | Promise<T> | undefined | null;
+};
+
+export type ResourceActionsWithStorageProvided<
+  T,
+  RS extends ResourceStorage<NoInfer<T>>,
+  R = unknown
+> = {
+  mutate: ReturnType<RS>[1];
   refetch: (info?: R) => T | Promise<T> | undefined | null;
 };
 
@@ -509,25 +522,58 @@ export type ResourceFetcherInfo<T, R = unknown> = {
   refetching: R | boolean;
 };
 
-export type ResourceOptions<T, S = unknown> = {
+export type ResourceOptions<T, RS extends ResourceStorage<NoInfer<T>>, S = unknown> = {
   initialValue?: T;
   name?: string;
   deferStream?: boolean;
   ssrLoadFrom?: "initial" | "server";
-  storage?: (init: T | undefined) => [Accessor<T | undefined>, Setter<T | undefined>];
+  storage?: RS;
   onHydrated?: (k: S | undefined, info: { value: T | undefined }) => void;
 };
 
-export type InitializedResourceOptions<T, S = unknown> = ResourceOptions<T, S> & {
+export type InitializedResourceOptions<
+  T,
+  RS extends ResourceStorage<NoInfer<T>>,
+  S = unknown
+> = ResourceOptions<T, RS, S> & {
   initialValue: T;
 };
 
-export type ResourceReturn<T, R = unknown> = [Resource<T>, ResourceActions<T | undefined, R>];
+export type ResourceOptionsWithStorage<
+  T,
+  RS extends ResourceStorage<NoInfer<T>>,
+  S = unknown
+> = ResourceOptions<T, RS, S> & {
+  storage: RS;
+};
 
-export type InitializedResourceReturn<T, R = unknown> = [
-  InitializedResource<T>,
-  ResourceActions<T, R>
+export type InitializedResourceOptionsWithStorage<
+  T,
+  RS extends ResourceStorage<NoInfer<T>>,
+  S = unknown
+> = InitializedResourceOptions<T, RS, S> & ResourceOptionsWithStorage<T, RS, S>;
+
+export type ResourceReturn<T, RS extends ResourceStorage<NoInfer<T>>, R = unknown> = [
+  Resource<T>,
+  ResourceActions<T, RS, R>
 ];
+
+export type InitializedResourceReturn<T, RS extends ResourceStorage<NoInfer<T>>, R = unknown> = [
+  InitializedResource<T>,
+  ResourceActions<T, RS, R>
+];
+
+export type InitializedResourceReturnWithStorageProvided<
+  T,
+  RS extends ResourceStorage<NoInfer<T>>,
+  R = unknown
+> = [InitializedResource<T>, ResourceActionsWithStorageProvided<T, RS, R>];
+
+export type ResourceReturnWithStorageProvided<
+  T,
+  RS extends ResourceStorage<NoInfer<T>>,
+  R = unknown
+> = [Resource<T>, ResourceActionsWithStorageProvided<T, RS, R>];
 
 /**
  * Creates a resource that wraps a repeated promise in a reactive pattern:
@@ -557,40 +603,53 @@ export type InitializedResourceReturn<T, R = unknown> = [
  *
  * @description https://www.solidjs.com/docs/latest/api#createresource
  */
-export function createResource<T, R = unknown>(
+export function createResource<T, RS extends ResourceStorage<NoInfer<T>>, R = unknown>(
   fetcher: ResourceFetcher<true, T, R>,
-  options: InitializedResourceOptions<NoInfer<T>, true>
-): InitializedResourceReturn<T, R>;
-export function createResource<T, R = unknown>(
+  options: InitializedResourceOptionsWithStorage<T, RS, true>
+): InitializedResourceReturnWithStorageProvided<T, RS, R>;
+export function createResource<T, RS extends ResourceStorage<NoInfer<T>>, R = unknown>(
   fetcher: ResourceFetcher<true, T, R>,
-  options?: ResourceOptions<NoInfer<T>, true>
-): ResourceReturn<T, R>;
-export function createResource<T, S, R = unknown>(
+  options: InitializedResourceOptions<T, RS, true>
+): InitializedResourceReturn<T, RS, R>;
+export function createResource<T, RS extends ResourceStorage<NoInfer<T>>, R = unknown>(
+  fetcher: ResourceFetcher<true, T, R>,
+  options: ResourceOptionsWithStorage<T, RS, true>
+): ResourceReturnWithStorageProvided<T, RS, R>;
+export function createResource<T, RS extends ResourceStorage<NoInfer<T>>, R = unknown>(
+  fetcher: ResourceFetcher<true, T, R>,
+  options?: ResourceOptions<T, RS, true>
+): ResourceReturn<T, RS, R>;
+export function createResource<T, S, RS extends ResourceStorage<NoInfer<T>>, R = unknown>(
   source: ResourceSource<S>,
   fetcher: ResourceFetcher<S, T, R>,
-  options: InitializedResourceOptions<NoInfer<T>, S>
-): InitializedResourceReturn<T, R>;
-export function createResource<T, S, R = unknown>(
+  options: InitializedResourceOptions<T, RS, S>
+): InitializedResourceReturn<T, RS, R>;
+export function createResource<T, S, RS extends ResourceStorage<NoInfer<T>>, R = unknown>(
   source: ResourceSource<S>,
   fetcher: ResourceFetcher<S, T, R>,
-  options?: ResourceOptions<NoInfer<T>, S>
-): ResourceReturn<T, R>;
-export function createResource<T, S, R>(
+  options: ResourceOptionsWithStorage<T, RS, S>
+): ResourceReturnWithStorageProvided<T, RS, R>;
+export function createResource<T, S, RS extends ResourceStorage<NoInfer<T>>, R = unknown>(
+  source: ResourceSource<S>,
+  fetcher: ResourceFetcher<S, T, R>,
+  options?: ResourceOptions<T, RS, S>
+): ResourceReturn<T, RS, R>;
+export function createResource<T, S, RS extends ResourceStorage<NoInfer<T>>, R>(
   pSource: ResourceSource<S> | ResourceFetcher<S, T, R>,
-  pFetcher?: ResourceFetcher<S, T, R> | ResourceOptions<T, S>,
-  pOptions?: ResourceOptions<T, S> | undefined
-): ResourceReturn<T, R> {
+  pFetcher?: ResourceFetcher<S, T, R> | ResourceOptions<T, RS, S>,
+  pOptions?: ResourceOptions<T, RS, S> | undefined
+): ResourceReturn<T, RS, R> {
   let source: ResourceSource<S>;
   let fetcher: ResourceFetcher<S, T, R>;
-  let options: ResourceOptions<T, S>;
+  let options: ResourceOptions<T, RS, S>;
   if ((arguments.length === 2 && typeof pFetcher === "object") || arguments.length === 1) {
     source = true as ResourceSource<S>;
     fetcher = pSource as ResourceFetcher<S, T, R>;
-    options = (pFetcher || {}) as ResourceOptions<T, S>;
+    options = (pFetcher || {}) as ResourceOptions<T, RS, S>;
   } else {
     source = pSource as ResourceSource<S>;
     fetcher = pFetcher as ResourceFetcher<S, T, R>;
-    options = pOptions || ({} as ResourceOptions<T, S>);
+    options = pOptions || ({} as ResourceOptions<T, RS, S>);
   }
 
   let pr: Promise<T> | null = null,
@@ -603,14 +662,16 @@ export function createResource<T, S, R>(
       typeof source === "function" && createMemo(source as () => S | false | null | undefined);
 
   const contexts = new Set<SuspenseContextType>(),
-    [value, setValue] = (options.storage || createSignal)(options.initialValue) as Signal<
-      T | undefined
-    >,
+    [signalValue, setSignalValue] = createSignal(options.initialValue),
+    storage = options.storage?.(options.initialValue),
     [error, setError] = createSignal<unknown>(undefined),
     [track, trigger] = createSignal(undefined, { equals: false }),
     [state, setState] = createSignal<"unresolved" | "pending" | "ready" | "refreshing" | "errored">(
       resolved ? "ready" : "unresolved"
     );
+
+  const value = () => (storage?.[0] ?? signalValue)();
+  const setValue = storage ? storage[1] : setSignalValue;
 
   if (sharedConfig.context) {
     id = `${sharedConfig.context.id}${sharedConfig.context.count++}`;
@@ -638,7 +699,7 @@ export function createResource<T, S, R>(
   }
   function completeLoad(v: T | undefined, err: any) {
     runUpdates(() => {
-      if (err === undefined) setValue(() => v);
+      if (err === undefined) storage ? storage[1](v) : setSignalValue(() => v);
       setState(err !== undefined ? "errored" : resolved ? "ready" : "unresolved");
       setError(err);
       for (const c of contexts.keys()) c.decrement!();
